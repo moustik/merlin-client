@@ -80,4 +80,11 @@ class WifiTest < Minitest::Test
     assert_equal [:join, "Cohen", nil], @net.calls.last
     assert_match(/Couldn't remove MERLIN_TEST from the saved networks/, @out.string)
   end
+
+  def test_network_state_for_the_speaker_log
+    @wifi.join_speaker("MERLIN_TEST", "pw")
+    assert_equal "wifi ip=192.168.4.2 default gw=192.168.4.1", @wifi.network_state
+    def @net.ip = raise(Merlin::Error, "nmcli: not running")
+    assert_equal "network state unknown", @wifi.network_state
+  end
 end

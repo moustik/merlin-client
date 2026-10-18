@@ -48,6 +48,7 @@ module Merlin
       def home_ssid = @wifi.home_ssid
       def rejoin_speaker = @wifi.rejoin_speaker
       def restore = @wifi.restore
+      def network_state = @wifi.network_state
 
       def join_speaker(ssid, password)
         @waiting = { ssid: ssid, status: Wifi::ASK }

@@ -337,14 +337,8 @@ module Merlin
 
     def speaker_trace(msg) = @speaker_opts[:logger]&.call(msg)
 
-    # Which network the Mac is on right now (speaker AP is 192.168.4.x).
-    def network_snapshot
-      ip = `ipconfig getifaddr en0 2>/dev/null`.strip
-      gw = `route -n get default 2>/dev/null`[/gateway: (\S+)/, 1]
-      "mac wifi ip=#{ip.empty? ? 'none' : ip} default gw=#{gw || 'none'}"
-    rescue SystemCallError
-      "network state unknown"
-    end
+    # Which network this computer is on right now (speaker AP is 192.168.4.x).
+    def network_snapshot = @wifi.respond_to?(:network_state) ? @wifi.network_state : "network state unknown"
 
     def pause(seconds) = sleep(seconds)
 

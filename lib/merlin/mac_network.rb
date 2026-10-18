@@ -49,6 +49,11 @@ module Merlin
       out.strip.then { _1.empty? ? nil : _1 }
     end
 
+    def default_gateway
+      out, = Open3.capture2("route", "-n", "get", "default")
+      out[/gateway: (\S+)/, 1]
+    end
+
     # Joins a network; for a known network the password comes from the keychain.
     def join(ssid, password = nil)
       run!("networksetup", "-setairportnetwork", interface, ssid, *password)

@@ -73,6 +73,14 @@ module Merlin
       say "Joined the speaker's Wi-Fi #{ssid}."
     end
 
+    # One line for the speaker log: where this computer is right now.
+    def network_state
+      gateway = @network.default_gateway if @network.respond_to?(:default_gateway)
+      "wifi ip=#{@network.ip || 'none'} default gw=#{gateway || 'none'}"
+    rescue Error, SystemCallError
+      "network state unknown"
+    end
+
     # After a dropped link during the transfer: rejoin if we've left it.
     def rejoin_speaker
       return if on_speaker? || @speaker_ssid.nil?

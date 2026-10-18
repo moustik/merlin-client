@@ -40,6 +40,15 @@ module Merlin
       nil
     end
 
+    # The machine-wide default route, whichever interface it uses: with the
+    # speaker profile it should never be 192.168.4.1.
+    def default_gateway
+      out, = Open3.capture2("ip", "-4", "route", "show", "default")
+      out[/\Adefault via (\S+)/, 1]
+    rescue SystemCallError
+      nil
+    end
+
     # With a password: the speaker, through its own profile (the password is
     # handed to nmcli in a private file, never on the command line, and isn't
     # stored in the profile). Without: a saved network, found by its SSID.

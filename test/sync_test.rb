@@ -81,6 +81,7 @@ class SyncTest < Minitest::Test
     def initialize(net) = @net = net
     def join_speaker(*) = @net.on_speaker = true
     def restore = @net.on_speaker = !@net.user_reconnects
+    def network_state = "wifi ip=#{@net.on_speaker ? '192.168.4.2' : 'none'}"
   end
 
   PLAYLIST = '[{"uuid":"u1","title":"Contes","child":[{"uuid":"a1","title":"Le loup"}]}]'
@@ -263,9 +264,9 @@ class SyncTest < Minitest::Test
     assert_equal "SUCCESS", @backend.reports.last[1][:status]
     assert_equal @audio, @fake.files["a1.mp3"]
     assert_equal 3, @fake.connections # original, reconnect with silent ping, working reconnect
-    assert(traces.any? { _1.start_with?("!! link problem during audio 1/1 a1.mp3") && _1.include?("mac wifi ip=") })
+    assert(traces.any? { _1.start_with?("!! link problem during audio 1/1 a1.mp3") && _1.include?("wifi ip=192.168.4.2") })
     assert(traces.any? { _1.start_with?("reconnect attempt failed: timed out waiting for cmd 2") })
-    assert(traces.any? { _1.start_with?("reconnected — mac wifi ip=") })
+    assert(traces.any? { _1.start_with?("reconnected — wifi ip=") })
   end
 
   # Verte at 22:12: the speaker drops the session, then accepts-and-resets new

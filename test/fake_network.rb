@@ -23,6 +23,7 @@ class FakeNetwork
   def current_ssid = @ssid
   def ip = @ssid.to_s.start_with?("MERLIN") ? "192.168.4.2" : (@ssid ? "10.0.0.12" : nil)
   def speaker_visible? = @scans > @speaker_appears_after
+  def default_gateway = ip&.sub(/\.\d+\z/, ".1")
 
   def visible_ssids
     synchronize { @scans += 1 }
