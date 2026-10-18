@@ -2,15 +2,20 @@
 
 require "json"
 require "fileutils"
+require "rbconfig"
 
 module Merlin
   # Local state shared by the CLI and the TUI (~/.config/merlin by default).
   class Config
     attr_reader :home
 
-    def initialize(home = ENV.fetch("MERLIN_HOME", File.join(Dir.home, ".config", "merlin")))
+    def initialize(home = ENV.fetch("MERLIN_HOME", File.join(Dir.home, ".config", "merlin")),
+                   linux: RbConfig::CONFIG["host_os"].include?("linux"))
       @home = home
+      @linux = linux
     end
+
+    def linux? = @linux
 
     def setting_id = settings["setting_id"]
     def setting_id=(id)
@@ -21,8 +26,9 @@ module Merlin
     def cache_dir = File.join(home, "cache")
     def log_dir = File.join(home, "logs")
 
-    # This Mac's Wi-Fi (network name + scans via the Merlin Wi-Fi helper app).
-    def network = MacNetwork.new(helper: WifiHelper.new(dir: home))
+    # This computer's Wi-Fi: NetworkManager on Linux; on macOS, network name +
+    # scans via the Merlin Wi-Fi helper app.
+    def network = linux? ? LinuxNetwork.new : MacNetwork.new(helper: WifiHelper.new(dir: home))
 
     # Audio imported from this Mac for the selected speaker.
     def library(setting_id = self.setting_id) = LocalLibrary.new(dir: File.join(home, "library"), setting_id: setting_id)
@@ -32,7 +38,8 @@ module Merlin
     def speaker_log(echo: nil) = SpeakerLog.new(dir: log_dir, echo: echo)
 
     def isolation(out: $stdout, speaker_ip: Speaker::DEFAULT_HOST, port: Speaker::DEFAULT_PORT)
-      Isolation.new(state_path: File.join(home, "isolation.json"), speaker_ip: speaker_ip, port: port, out: out)
+      (linux? ? NftIsolation : Isolation).new(state_path: File.join(home, "isolation.json"), speaker_ip: speaker_ip,
+                                              port: port, out: out)
     end
 
     def settings

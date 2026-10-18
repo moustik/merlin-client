@@ -20,7 +20,7 @@ class WifiTest < Minitest::Test
     assert_equal "MERLIN_TEST", @net.ssid
     assert_equal [[:join, "MERLIN_TEST", "pw"]], @net.calls, "joins only once the network is visible"
     assert_equal ["Looking for MERLIN_TEST…", "Found MERLIN_TEST, joining…", "Connected to MERLIN_TEST"], @statuses
-    assert_includes @out.string, "#{Merlin::Wifi::ASK}: this Mac joins MERLIN_TEST by itself as soon as it appears."
+    assert_includes @out.string, "#{Merlin::Wifi::ASK}: this computer joins MERLIN_TEST by itself as soon as it appears."
 
     @wifi.restore
     assert_equal "Cohen", @net.ssid
@@ -70,5 +70,14 @@ class WifiTest < Minitest::Test
     @net.ssid = "Cohen" # macOS wandered off
     @wifi.rejoin_speaker
     assert_equal "MERLIN_TEST", @net.ssid
+  end
+
+  def test_restore_still_reconnects_when_forgetting_the_speaker_fails
+    @wifi.remember_home!
+    @wifi.join_speaker("MERLIN_TEST", "pw")
+    def @net.forget(_) = raise(Merlin::Error, "nmcli: not authorized")
+    @wifi.restore
+    assert_equal [:join, "Cohen", nil], @net.calls.last
+    assert_match(/Couldn't remove MERLIN_TEST from the saved networks/, @out.string)
   end
 end

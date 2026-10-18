@@ -72,7 +72,7 @@ module Merlin
 
     attr_writer :out # where status lines go (the TUI points it at each sync's log)
 
-    def active? = !@token.nil?
+    def active? = @active == true
     def leftover? = File.exist?(@state_path)
     def authorized? = !@helper.nil? && @wait&.alive?
 
@@ -81,7 +81,7 @@ module Merlin
     def authorize!
       return true if authorized?
 
-      @helper_in, @helper_out, @wait = Open3.popen2e(*@sudo, "/bin/sh", "-c", HELPER, "merlin-isolation", rules, @pfctl)
+      @helper_in, @helper_out, @wait = Open3.popen2e(*@sudo, "/bin/sh", "-c", self.class::HELPER, "merlin-isolation", rules, @pfctl)
       @helper = true
       # sudo may print "Sorry, try again." and re-prompt: wait for the helper.
       said = []
@@ -98,6 +98,7 @@ module Merlin
       release_leftover
       output = call("on")
       @token = output[/Token\s*:\s*(\d+)/, 1]
+      @active = true
       FileUtils.mkdir_p(File.dirname(@state_path))
       File.write(@state_path, JSON.generate(token: @token, interface: interface))
       @out.puts "Traffic filter on: only the transfer can reach the speaker."
@@ -109,6 +110,7 @@ module Merlin
     def disable!
       call("off #{@token}")
       @token = nil
+      @active = false
       FileUtils.rm_f(@state_path)
       @out.puts "Traffic filter off."
       true
@@ -134,6 +136,8 @@ module Merlin
 
     private
 
+    def tool_name = "pfctl"
+
     def interface
       @interface ||= begin
         out, = Open3.capture2("networksetup", "-listallhardwareports")
@@ -153,7 +157,7 @@ module Merlin
 
         line = @helper_out.gets or raise Error, "traffic filter helper exited"
         return output if line.start_with?("__OK__")
-        raise Error, "pfctl #{cmd.split.first} failed: #{output.strip.lines.last&.strip}" if line.start_with?("__FAIL__")
+        raise Error, "#{tool_name} #{cmd.split.first} failed: #{output.strip.lines.last&.strip}" if line.start_with?("__FAIL__")
 
         output << line
       end

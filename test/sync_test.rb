@@ -385,4 +385,61 @@ class SyncTest < Minitest::Test
     assert_equal "510_FAILED_ON_SDK_ESTABLISH_CONNEXION", @backend.reports.first[1][:status_code]
     refute File.exist?(File.join(@dir, "pending_report.json"))
   end
+
+  # --- Cleanup: the synchro must never stay PENDING ------------------------
+
+  def isolated_sync(wifi, events, **opts)
+    Merlin::Sync.new(backend: @backend, cache_dir: @dir, wifi: wifi, isolation: FakeIsolation.new(events),
+                     speaker_opts: { host: "127.0.0.1", port: @fake.port }, out: StringIO.new, **opts)
+  end
+
+  def pending_report = JSON.parse(File.read(File.join(@dir, "pending_report.json")))
+
+  def test_a_crash_while_reconnecting_keeps_the_report_and_removes_the_filter
+    events = []
+    wifi = NoWifi.new(@net)
+    wifi.define_singleton_method(:restore) { raise Errno::ENOENT, "networksetup" }
+    isolated_sync(wifi, events).run
+    assert_includes events, :filter_off
+    assert_empty @backend.reports
+    assert_equal %w[syn-42 SUCCESS], [pending_report["id"], pending_report.dig("body", "status")]
+  end
+
+  def test_ctrl_c_while_reconnecting_still_leaves_the_report_for_the_next_sync
+    events = []
+    wifi = NoWifi.new(@net)
+    wifi.define_singleton_method(:restore) { raise Interrupt }
+    assert_raises(Interrupt) { isolated_sync(wifi, events).run }
+    assert_includes events, :filter_off
+    assert_equal "SUCCESS", pending_report.dig("body", "status")
+  end
+
+  def test_a_failing_transfer_end_callback_does_not_skip_the_rest
+    events = []
+    wifi = NoWifi.new(@net)
+    wifi.define_singleton_method(:restore) { events << :restore; @net.on_speaker = false }
+    isolated_sync(wifi, events, on_transfer_end: ->(_) { raise "UI went away" }).run
+    assert_equal %i[filter_on filter_off restore], events
+    assert_equal "SUCCESS", @backend.reports.last[1][:status]
+    refute File.exist?(File.join(@dir, "pending_report.json"))
+  end
+
+  def test_dry_run_closes_the_synchro_as_cancelled_without_touching_the_speaker
+    plan = Merlin::Sync.new(backend: @backend, cache_dir: @dir, wifi: NoWifi.new(@net), dry_run: true,
+                            speaker_opts: { host: "127.0.0.1", port: @fake.port }, out: StringIO.new).run
+    assert_equal "syn-42", plan["id"]
+    assert_empty @fake.commands
+    refute @net.on_speaker
+    id, body = @backend.reports.last
+    assert_equal ["syn-42", "FAIL", "800_FAILED_ON_USER_ABORT"], [id, body[:status], body[:status_code]]
+  end
+
+  def test_dry_run_failure_is_reported_with_its_own_code
+    def @backend.download(*) = raise(URI::InvalidURIError, "bad URI")
+    assert_raises(Merlin::Sync::Failure) do
+      Merlin::Sync.new(backend: @backend, cache_dir: @dir, wifi: NoWifi.new(@net), dry_run: true,
+                       out: StringIO.new).run
+    end
+    assert_equal "202_FAILED_ON_PREPARE_CONTENT_FILES", @backend.reports.last[1][:status_code]
+  end
 end

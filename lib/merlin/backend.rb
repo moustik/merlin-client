@@ -238,7 +238,7 @@ module Merlin
       yield
     rescue Faraday::ConnectionFailed, Faraday::TimeoutError, Faraday::SSLError => e
       host = (URI(url).host rescue url)
-      raise OfflineError, "can't reach #{host} (#{e.message}) — is this Mac still on the speaker's Wi-Fi?"
+      raise OfflineError, "can't reach #{host} (#{e.message}) — is this computer still on the speaker's Wi-Fi?"
     end
 
   end

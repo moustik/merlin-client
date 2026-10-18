@@ -77,8 +77,8 @@ module Merlin
         o.on("--host HOST", "Speaker address (default #{Speaker::DEFAULT_HOST})") { |v| @opts[:host] = v }
         o.on("--port PORT", Integer, "Speaker port (default #{Speaker::DEFAULT_PORT})") { |v| @opts[:port] = v }
         o.on("--setting-id ID", "Speaker (settings id) to sync, overrides `use`") { |v| @opts[:setting_id] = v }
-        o.on("--dry-run", "sync: create synchro and download files only") { @opts[:dry_run] = true }
-        o.on("--no-isolate", "sync: don't filter this Mac's other traffic (the speaker may crash)") { @opts[:no_isolate] = true }
+        o.on("--dry-run", "sync: create synchro and download files only (the synchro is then closed as cancelled)") { @opts[:dry_run] = true }
+        o.on("--no-isolate", "sync: don't filter this computer's other traffic (the speaker may crash)") { @opts[:no_isolate] = true }
         o.on("--json", "Catalog commands: print the raw API JSON") { @opts[:json] = true }
         o.on("-v", "--verbose", "Log protocol/HTTP traffic") { @opts[:verbose] = true }
       end
@@ -139,7 +139,7 @@ module Merlin
     def isolation_for_sync
       return nil if @opts[:no_isolate] || @opts[:dry_run]
 
-      puts "The speaker crashes if this Mac's other traffic reaches it; a temporary filter needs admin rights."
+      puts "The speaker crashes if this computer's other traffic reaches it; a temporary filter needs admin rights."
       config.isolation(speaker_ip: @opts[:host], port: @opts[:port]).tap(&:authorize!)
     end
 

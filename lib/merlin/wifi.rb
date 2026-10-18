@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Merlin
-  # Switching this Mac between its usual Wi-Fi and the speaker's access point:
+  # Switching this computer between its usual Wi-Fi and the speaker's access point:
   #
   # 1. remember_home!  — right after talking to the Merlin API, note the
   #                      network we're on (needs Location Services, see
@@ -44,18 +44,18 @@ module Merlin
         @home_ssid = ssid
         say "Will reconnect to #{ssid.inspect} after the transfer."
       else
-        say "Couldn't read this Mac's Wi-Fi name (Location Services for \"Merlin Wi-Fi\"?): " \
-            "macOS will pick the network back after the transfer."
+        say "Couldn't read this computer's Wi-Fi name (on macOS: Location Services for \"Merlin Wi-Fi\"?): " \
+            "the system will pick the network back after the transfer."
       end
     rescue Error => e
-      say "Couldn't read this Mac's Wi-Fi name (#{e.message})."
+      say "Couldn't read this computer's Wi-Fi name (#{e.message})."
     end
 
     def join_speaker(ssid, password)
       @speaker_ssid = ssid
       @speaker_password = password
       deadline = Time.now + @give_up
-      say "#{ASK}: this Mac joins #{ssid} by itself as soon as it appears." unless on_speaker?
+      say "#{ASK}: this computer joins #{ssid} by itself as soon as it appears." unless on_speaker?
       update_status("Looking for #{ssid}…")
       until on_speaker?
         raise Error, "the speaker's Wi-Fi #{ssid} didn't show up within #{@give_up / 60} minutes" if Time.now > deadline
@@ -82,13 +82,13 @@ module Merlin
     end
 
     def restore
-      @network.forget(@speaker_ssid) if @speaker_ssid
+      forget_speaker
       if @home_ssid
         say "Reconnecting to #{@home_ssid.inspect}…"
         begin
           @network.join(@home_ssid)
         rescue Error => e
-          say "Couldn't join #{@home_ssid.inspect} (#{e.message}); letting macOS reconnect."
+          say "Couldn't join #{@home_ssid.inspect} (#{e.message}); letting the system reconnect."
           @network.power_cycle
         end
       else
@@ -96,11 +96,18 @@ module Merlin
         @network.power_cycle
       end
       wait_off_speaker
-    rescue Error => e
+    rescue Error, SystemCallError => e
       say "Could not reconnect automatically: #{e.message} (reconnect manually)"
     end
 
     private
+
+    # Failing to forget must not stop the reconnection.
+    def forget_speaker
+      @network.forget(@speaker_ssid) if @speaker_ssid
+    rescue Error, SystemCallError => e
+      say "Couldn't remove #{@speaker_ssid} from the saved networks (#{e.message})."
+    end
 
     def on_speaker? = @network.ip.to_s.start_with?(SPEAKER_SUBNET)
 

@@ -140,13 +140,13 @@ module Merlin
           [
             "Transfer the basket#{" (#{app.basket_count} pending)" if app.basket_count} and your account's content to #{speaker}.",
             "Files are downloaded first while you're online. Then you'll be asked to switch the speaker's " \
-            "Wi-Fi on: this Mac joins it by itself, and reconnects to your usual network at the end."
+            "Wi-Fi on: this computer joins it by itself, and reconnects to your usual network at the end."
           ]
         end
 
         def build_rows
           [Row.item("Start transfer", :start),
-           Row.item("Block this Mac's other traffic (admin password): " \
+           Row.item("Block this computer's other traffic (admin password): " \
                     "#{@isolate ? 'ON' : 'off (speaker may crash)'}", :isolate)]
         end
 
@@ -199,8 +199,8 @@ module Merlin
           return true if session.isolation.authorized? # granted at startup or by an earlier sync
 
           app.suspend do
-            puts "\nThe speaker crashes when this Mac's other traffic reaches it, so a temporary"
-            puts "network filter is applied during the transfer. macOS needs your admin password:"
+            puts "\nThe speaker crashes when this computer's other traffic reaches it, so a temporary"
+            puts "network filter is applied during the transfer. It needs your admin password:"
             session.isolation.authorize!
           end
           true
@@ -222,7 +222,7 @@ module Merlin
             tui.line(spans: [tui.span(content: "1. Switch the speaker on")], alignment: :center),
             tui.line(spans: [tui.span(content: "2. Press its Wifi / Transfert button")], alignment: :center),
             tui.line(spans: []),
-            tui.line(spans: [tui.span(content: "This Mac joins #{waiting[:ssid]} by itself as soon as it appears,", style: app.style(fg: :gray))], alignment: :center),
+            tui.line(spans: [tui.span(content: "This computer joins #{waiting[:ssid]} by itself as soon as it appears,", style: app.style(fg: :gray))], alignment: :center),
             tui.line(spans: [tui.span(content: "and reconnects to #{@session.wifi.home_ssid || 'your usual network'} when the transfer is over.", style: app.style(fg: :gray))], alignment: :center),
             tui.line(spans: []),
             tui.line(spans: [tui.span(content: "⏳ #{waiting[:status]}", style: app.style(fg: :cyan))], alignment: :center)

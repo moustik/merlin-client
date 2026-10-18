@@ -65,7 +65,7 @@ module Merlin
       end
 
       def authorize_admin
-        puts "Syncing needs admin rights to keep this Mac's other traffic away from the speaker"
+        puts "Syncing needs admin rights to keep this computer's other traffic away from the speaker"
         puts "(it crashes the speaker). Enter your password once for this session, or Ctrl-C to skip:"
         isolation.authorize!
       rescue Error, Interrupt
@@ -128,10 +128,10 @@ module Merlin
 
       def new_sync(**) = @sync_factory.call(**)
 
-      # This Mac's Wi-Fi, shared by syncs (tests inject a fake).
+      # This computer's Wi-Fi, shared by syncs (tests inject a fake).
       def network = @network ||= config.network
 
-      # Audio imported from this Mac for the selected speaker.
+      # Audio imported from this computer for the selected speaker.
       def library = config.library
 
       # Hands the real terminal back (e.g. for sudo's password prompt), then

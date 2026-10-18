@@ -28,9 +28,9 @@ module Merlin
     # (success or failure), before reconnecting and reporting to Merlin.
     def initialize(backend:, cache_dir:, wifi:, speaker_opts: {}, out: $stdout, dry_run: false,
                    internet_wait: 15, on_transfer_end: nil, isolation: nil, library: nil)
-      @library = library # audio imported from this Mac (LocalLibrary), merged into the playlist
+      @library = library # audio imported from this computer (LocalLibrary), merged into the playlist
       @on_transfer_end = on_transfer_end
-      @isolation = isolation # keeps the Mac's other traffic off the speaker (see Isolation)
+      @isolation = isolation # keeps this computer's other traffic off the speaker (see Isolation)
       @backend = backend
       @cache_dir = cache_dir
       @wifi = wifi
@@ -52,7 +52,7 @@ module Merlin
       @wifi.remember_home! if @wifi.respond_to?(:remember_home!)
       say "Synchro #{id}: #{plan.fetch('fileList', []).size} file(s) in plan"
 
-      return merge_library(plan) && prepare_files(plan) && write_playlist(plan) && plan if @dry_run
+      return dry_run(id, plan, type) if @dry_run
 
       # From here on every outcome is reported, so the synchro never stays PENDING.
       report = { type: type }
@@ -79,19 +79,54 @@ module Merlin
         fail_report(report, "900_FAILED_ON_UNKNOW_ERROR", "#{e.class}: #{e.message}")
         raise
       ensure
-        @on_transfer_end&.call(report.dup) if offline
-        unisolate! if offline
-        # restore returns :skip when the user chose not to wait for internet.
-        online = !offline || (@wifi.restore != :skip && wait_for_internet)
-        online ? send_report(id, report) : save_pending_report(id, report)
+        finish(id, report, offline)
       end
       plan
+    end
+
+    # Stops before the speaker. The synchro is then closed as aborted by the
+    # user, the report the app sends when a transfer is cancelled, instead of
+    # staying PENDING on Merlin's side.
+    def dry_run(id, plan, type)
+      report = { type: type }
+      merge_library(plan) && prepare_files(plan) && write_playlist(plan)
+      fail_report(report, "800_FAILED_ON_USER_ABORT", "dry run: stopped before the speaker")
+      plan
+    rescue Failure => e
+      fail_report(report, e.code, e.message)
+      raise
+    rescue Interrupt
+      fail_report(report, "800_FAILED_ON_USER_ABORT", "aborted by user")
+      raise
+    rescue StandardError => e
+      fail_report(report, "900_FAILED_ON_UNKNOW_ERROR", "#{e.class}: #{e.message}")
+      raise
+    ensure
+      send_report(id, report)
+    end
+
+    # Leaves the speaker and reports, whatever went wrong before or goes wrong
+    # here. The report is saved first, so even an error or a second Ctrl-C
+    # while reconnecting can't leave the synchro PENDING: it's sent at the
+    # next sync at worst.
+    def finish(id, report, offline)
+      return send_report(id, report) unless offline
+
+      write_pending_report(id, report)
+      begin
+        cleanup("the end-of-transfer callback") { @on_transfer_end&.call(report.dup) }
+      ensure
+        cleanup("removing the traffic filter") { unisolate! }
+      end
+      # restore returns :skip when the user chose not to wait for internet.
+      online = cleanup("reconnecting") { @wifi.restore != :skip && wait_for_internet }
+      online ? send_report(id, report) : say("Report not sent (still offline); it will be sent at the next sync.")
     end
 
     # After leaving the speaker's Wi-Fi, give the network time to come back
     # before reporting; if it doesn't, send_report saves the report for later.
     # Applied before joining: the rules only match the speaker subnet, so they
-    # are harmless at home and the speaker never sees the Mac's traffic burst.
+    # are harmless at home and the speaker never sees this computer's traffic burst.
     def isolate!
       return unless @isolation
 
@@ -126,7 +161,7 @@ module Merlin
     def prepare_files(plan)
       dir = File.join(@cache_dir, "sync_files")
       files = plan.fetch("fileList", []).map do |f|
-        if f["path"] # imported from this Mac (LocalLibrary): nothing to download
+        if f["path"] # imported from this computer (LocalLibrary): nothing to download
           raise Errno::ENOENT, f["path"] unless File.size?(f["path"])
 
           next f
@@ -231,7 +266,7 @@ module Merlin
     end
 
     # Safety net for genuine Wi-Fi hiccups. The long outages seen earlier were
-    # the speaker rebooting under the Mac's other traffic, which the traffic
+    # the speaker rebooting under this computer's other traffic, which the traffic
     # filter (Isolation) now prevents, so retries are quick.
     LINK_RETRIES = 8
     LINK_WINDOW = 5 # seconds allowed per reconnect attempt
@@ -271,7 +306,7 @@ module Merlin
       if @connected_once
         say "  speaker didn't respond during #{what} (#{error.message}); reconnecting in " \
             "#{retry_pause(attempt)}s (retry #{attempt}/#{LINK_RETRIES})..."
-        say "  (if this Mac left the speaker's Wi-Fi, rejoin #{@speaker_ssid})" if @speaker_ssid && attempt == 1
+        say "  (if this computer left the speaker's Wi-Fi, rejoin #{@speaker_ssid})" if @speaker_ssid && attempt == 1
       else
         say "  speaker not reachable yet (#{error.message}); retrying (#{attempt}/#{LINK_RETRIES})..."
       end
@@ -399,8 +434,20 @@ module Merlin
     end
 
     def save_pending_report(id, report, reason: "still offline")
-      save_json("pending_report.json", { "id" => id, "body" => report.merge(logs: @logs.last(200)) })
+      write_pending_report(id, report)
       say "Report not sent (#{reason}); it will be sent at the next sync."
+    end
+
+    def write_pending_report(id, report)
+      save_json("pending_report.json", { "id" => id, "body" => report.merge(logs: @logs.last(200)) })
+    end
+
+    # A cleanup step that must not stop the ones after it; nil when it failed.
+    def cleanup(what)
+      yield
+    rescue StandardError => e
+      say "warning: #{what} failed (#{e.class}: #{e.message})"
+      nil
     end
 
     def resend_pending_report

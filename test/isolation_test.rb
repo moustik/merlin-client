@@ -13,7 +13,7 @@ class IsolationTest < Minitest::Test
     @pfctl = File.join(@dir, "pfctl")
     File.write(@pfctl, <<~SH)
       #!/bin/sh
-      echo "$*" >> #{@log}
+      printf '%s\\n' "$*" >> #{@log}
       case "$*" in
         *"-f -"*) cat >> #{@log}.rules ;;
         "-E") [ -e #{@dir}/fail_E ] && { echo "pfctl: permission denied"; exit 1; }
