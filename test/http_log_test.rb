@@ -43,6 +43,12 @@ class RedactTest < Minitest::Test
     assert_equal "https://h/u/[EMAIL]/x", R.url("https://h/u/kid@example.com/x")
   end
 
+  def test_json_from_a_binary_stream_comes_back_as_utf8
+    body = R.body(%({"title":"Café","password":"x"}).b, "application/json")
+    assert_equal Encoding::UTF_8, body["title"].encoding
+    assert_equal ["Café", "[REDACTED]"], body.values_at("title", "password")
+  end
+
   def test_binary_and_headers
     assert_equal "<binary 4 bytes>", R.body("\xFF\xD8\x00\x01".b)
     assert_equal({ "Authorization" => "[REDACTED]", "Set-Cookie" => "[REDACTED]", "Location" => "https://x/?token=[REDACTED]",

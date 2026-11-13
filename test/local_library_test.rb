@@ -8,7 +8,7 @@ class LocalLibraryTest < Minitest::Test
   module FakeMedia
     module_function
 
-    def probe(path) = Merlin::Media::Info.new(title: File.read(path)[/title=(.*)/, 1], duration: 90, codec: "aac",
+    def probe(path) = Merlin::Media::Info.new(title: File.read(path, encoding: "UTF-8")[/title=(.*)/, 1], duration: 90, codec: "aac",
                                               sample_rate: 48_000, channels: 2, bit_rate: 256_000, has_cover: false)
     def prepare_audio(_src, dest, _info) = File.write(dest, "MP3") && :transcoded
     def prepare_cover(_src, dest, _info) = File.write(dest, "JPG") && :default

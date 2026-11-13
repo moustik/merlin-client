@@ -2,6 +2,7 @@
 
 require_relative "test_helper"
 require "tmpdir"
+require "minitest/mock"
 
 # Runs LinuxNetwork against a fake nmcli that logs its arguments and answers
 # like NetworkManager would, so no real network is touched.
@@ -20,11 +21,13 @@ class LinuxNetworkTest < Minitest::Test
         *"SSID device wifi list ifname wlan0 --rescan auto") printf 'Home\\\\:Net\\n\\nMERLIN_ABC\\nMERLIN_ABC\\n' ;;
         "-g IP4.ADDRESS device show wlan0") [ -e $dir/offline ] && exit 10; printf '192.168.4.2/24 | 10.1.0.2/16\\n' ;;
         "-t -f NAME,UUID,TYPE,TIMESTAMP connection show")
-          printf 'Old:uuid-old:802-11-wireless:100\\nHome profile:uuid-home:802-11-wireless:200\\nWired:uuid-eth:802-3-ethernet:300\\n'
+          [ -e $dir/no_saved ] || printf 'Old:uuid-old:802-11-wireless:100\\nHome profile:uuid-home:802-11-wireless:200\\n'
+          printf 'Wired:uuid-eth:802-3-ethernet:300\\n'
           [ -e $dir/profile ] && printf 'merlin-speaker:uuid-merlin:802-11-wireless:900\\n' ;;
         "-g 802-11-wireless.ssid connection show uuid uuid-home") printf 'Home\\\\:Net\\n' ;;
         "-g 802-11-wireless.ssid connection show uuid uuid-old") printf 'Old\\n' ;;
-        "connection add"*) touch $dir/profile ;;
+        "connection add"*) [ -e $dir/no_polkit ] && { echo "Error: Failed to add 'merlin-speaker' connection: Insufficient privileges"; exit 1; }
+          touch $dir/profile ;;
         "connection delete id merlin-speaker") rm $dir/profile ;;
         *"connection up id merlin-speaker"*)
           [ -e $dir/no_speaker ] && { echo "Error: Connection activation failed: No network with SSID found."; exit 4; }
@@ -94,6 +97,26 @@ class LinuxNetworkTest < Minitest::Test
     @net.join("MERLIN_ABC", "pw")
     @net.forget("MERLIN_ABC")
     assert_includes calls, "connection delete id merlin-speaker"
+  end
+
+  def test_power_cycle_without_a_saved_network_says_so
+    File.write(File.join(@dir, "no_saved"), "")
+    @net.stub(:sleep, nil) do
+      error = assert_raises(Merlin::Error) { @net.power_cycle }
+      assert_match(/no saved Wi-Fi network/, error.message)
+    end
+    refute(calls.any? { _1.include?("device connect") })
+  end
+
+  def test_power_cycle_reconnects_through_networkmanager
+    @net.stub(:sleep, nil) { @net.power_cycle }
+    assert_equal ["device disconnect wlan0", "--wait 15 device connect wlan0"], calls.grep(/device (dis)?connect/)
+  end
+
+  def test_polkit_refusal_explains_itself
+    File.write(File.join(@dir, "no_polkit"), "")
+    error = assert_raises(Merlin::Error) { @net.join("MERLIN_ABC", "pw") }
+    assert_match(/Insufficient privileges.*desktop session/, error.message)
   end
 
   def test_missing_nmcli_is_a_merlin_error

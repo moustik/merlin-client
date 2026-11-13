@@ -88,11 +88,19 @@ module Merlin
     # fits). Colors come from the name, so folders look distinct but stable.
     FOLDER_COLORS = %w[#E4572E #2E86AB #8E44AD #27AE60 #D35400 #C0392B #16A085 #34495E].freeze
     FOLDER_FONTS = ["/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
-                    "/System/Library/Fonts/Supplemental/Arial Bold.ttf"].freeze
+                    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",                     # Arch
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",         # Debian/Ubuntu
+                    "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",       # Fedora
+                    "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                    "C:/Windows/Fonts/arialbd.ttf"].freeze
 
     def imagemagick? = system("magick", "-version", out: File::NULL, err: File::NULL)
 
-    # Returns :titled, or :default when ImageMagick isn't installed.
+    # Returns :titled, or :default when ImageMagick isn't installed or can't
+    # render text (e.g. a minimal Linux with no fonts at all): a plain cover
+    # beats aborting the whole import.
     def folder_cover(title, dest)
       unless imagemagick?
         default_cover(dest)
@@ -110,8 +118,11 @@ module Merlin
         args = ["magick", "-size", "#{inner}x#{inner}", "-background", color, "-fill", "white",
                 *(font ? ["-font", font] : []), "-gravity", "center", "caption:@#{text.path}",
                 "-extent", "#{COVER_SIZE}x#{COVER_SIZE}", "-quality", "90", dest]
-        out, status = Open3.capture2e(*args)
-        raise Error, "cover for #{title.inspect} failed: #{out.strip.lines.last}" unless status.success?
+        _out, status = Open3.capture2e(*args)
+        unless status.success?
+          default_cover(dest)
+          return :default
+        end
       end
       :titled
     end

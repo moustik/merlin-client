@@ -15,6 +15,10 @@ module Merlin
   class LinuxNetwork
     PROFILE = "merlin-speaker"
     JOIN_TIMEOUT = 15 # seconds nmcli waits for an activation
+    # polkit lets the user of an active local (desktop) session change their
+    # own Wi-Fi profiles; over SSH or from a service it asks for auth and fails.
+    POLKIT_HINT = " (NetworkManager only lets a local desktop session change Wi-Fi settings: " \
+                  "run merlin from your desktop session, or add a polkit rule for your user)"
 
     def initialize(interface: nil, nmcli: "nmcli", user: Etc.getpwuid.name)
       @interface = interface
@@ -79,6 +83,9 @@ module Merlin
       rescue Error
         nil # already disconnected
       end
+      # Without a saved network nmcli only says "A 'wireless' setting is required…".
+      raise Error, "NetworkManager has no saved Wi-Fi network to go back to" if saved_wifi_profiles.all? { _1[:name] == PROFILE }
+
       sleep 3
       run!("--wait", JOIN_TIMEOUT.to_s, "device", "connect", interface)
     end
@@ -138,7 +145,11 @@ module Merlin
 
     def run!(*args)
       out, status = Open3.capture2e({ "LC_ALL" => "C" }, @nmcli, *args)
-      raise Error, out.strip.lines.last.to_s.strip.then { _1.empty? ? "nmcli #{args[0..1].join(' ')} failed" : _1 } unless status.success?
+      unless status.success?
+        message = out.strip.lines.last.to_s.strip.then { _1.empty? ? "nmcli #{args[0..1].join(' ')} failed" : _1 }
+        message += POLKIT_HINT if message.include?("Insufficient privileges")
+        raise Error, message
+      end
 
       out
     rescue SystemCallError => e

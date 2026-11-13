@@ -93,6 +93,13 @@ module Merlin
       return nil if raw.nil? || raw.to_s.empty?
 
       raw = raw.to_s
+      # Streamed bodies arrive as BINARY: parsed strings would stay BINARY and
+      # JSON.generate warns (json 3 will raise). Invalid bytes still end up
+      # as "<binary …>" or scrubbed below.
+      if raw.encoding == Encoding::BINARY
+        utf8 = raw.dup.force_encoding(Encoding::UTF_8)
+        raw = utf8 if utf8.valid_encoding?
+      end
       if content_type.to_s.include?("json") || raw.lstrip.start_with?("{", "[")
         value(JSON.parse(raw))
       elsif content_type.to_s.include?("x-www-form-urlencoded")

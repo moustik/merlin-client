@@ -74,6 +74,25 @@ class MediaTest < Minitest::Test
     refute_equal File.binread(a), File.binread(b)
   end
 
+  # A minimal Linux can have ImageMagick but no fonts: the import must go on.
+  def test_folder_cover_falls_back_when_imagemagick_cannot_draw_text
+    skip "the fake magick is a shell script" unless File.exist?("/bin/sh")
+    bin = File.join(@dir, "bin")
+    FileUtils.mkdir_p(bin)
+    File.write(File.join(bin, "magick"), <<~SH, perm: 0o755)
+      #!/bin/sh
+      [ "$1" = "-version" ] && exit 0
+      echo "magick: unable to read font" >&2; exit 1
+    SH
+    path = ENV.fetch("PATH")
+    ENV["PATH"] = "#{bin}:#{path}"
+    cover = File.join(@dir, "c.jpg")
+    assert_equal :default, M.folder_cover("Comptines", cover)
+    assert_jpeg_128(cover)
+  ensure
+    ENV["PATH"] = path if path
+  end
+
   def test_files_without_audio_are_rejected
     png = gen("pic.png", "-f", "lavfi", "-i", "color=blue:s=10x10", "-frames:v", "1")
     err = assert_raises(Merlin::Error) { M.probe(png) }
