@@ -12,12 +12,17 @@ bundle install                        # ratatui_ruby (native gem, compiles on fi
 bin/merlin                            # full-screen terminal UI (same as `bin/merlin tui`)
 ```
 
+Bundler only installs Ruby gems. The rest comes from your system's packages:
+on macOS, `brew install ffmpeg imagemagick`. On Linux, run
+`bin/bootstrap-linux.sh` once before `bundle install`; `--check` only lists
+what is missing (see *Linux* below).
+
 ### Terminal UI
 
 * **Log in / Log out.** After login, a single speaker is selected automatically. With several, you get a picker.
 * **Speaker.** Pick which speaker the next actions apply to.
 * **On my speaker.** The speaker's content tree. `space` marks items and `d` queues the marked ones (or the current one) for removal. `c` jumps to the catalog.
-* **My audio files.** Import audio from this Mac into any folder of the speaker, or into a new folder; see below.
+* **My audio files.** Import audio from this computer into any folder of the speaker, or into a new folder; see below.
 * **Browse / Search the catalog.** `enter` opens categories, collections and contents. `a` adds the marked episodes, or the collection under the cursor. Inside a collection, `A` adds every episode.
 * **Basket.** Pending adds and removals. `x` cancels the marked ones, `s` starts a sync.
 * **Sync now.** Runs the full transfer in the background with a live log. When it's time, a full-screen prompt asks you to switch the speaker on and press its Wifi / Transfert button. The Mac joins the speaker's network by itself as soon as it appears, and goes back to the network it was on when the sync ends, whether it succeeded or failed (see *Wi-Fi switching* below). The admin password for the traffic filter described below is asked once, when the TUI starts, and covers every sync until you quit. If you skip it with Ctrl-C, the first sync asks instead. `ctrl-c` aborts, and the abort is reported to Merlin.
@@ -133,7 +138,32 @@ HTTP traffic). State is stored in `~/.config/merlin` (override with
 `$MERLIN_HOME`). That covers OAuth tokens (mode 0600; the password is never
 stored), the selected speaker, downloaded files, and the last synchro plan.
 
-Tests: `rake` (they use an in-process fake speaker and a fake HTTP server).
+Tests: `bundle exec rake test` (they use an in-process fake speaker and a fake HTTP server).
+
+### Linux
+
+Tested on Arch Linux with NetworkManager, against a real speaker.
+
+```sh
+bin/bootstrap-linux.sh                # Ruby, bundler, compiler, ffmpeg, ImageMagick 7, font,
+                                      # NetworkManager, nftables (pacman, apt or dnf; asks for sudo)
+bundle install
+bin/merlin
+```
+
+* **Wi-Fi goes through NetworkManager** (`nmcli`). The speaker is joined through
+  a temporary `merlin-speaker` profile that can never become the default route
+  or DNS server, with IPv6, mDNS and LLMNR off. Its password is never saved or
+  put on a command line, and the profile is deleted after the sync. In the test,
+  nothing but DHCP, ARP and the transfer reached the speaker.
+* **Traffic filter:** an nftables table (`inet merlin`) with the same rules as
+  the macOS one, through sudo. `--no-isolate` skips it.
+* **Run merlin from your desktop session.** NetworkManager (polkit) lets the
+  logged-in desktop user change Wi-Fi settings, but over SSH every change fails
+  with "Insufficient privileges". `bin/bootstrap-linux.sh --check` tells you which case you're in.
+* **Going back to your network** needs it saved in NetworkManager; without one, merlin says so.
+* **Locale:** use a UTF-8 one (`LANG=C.UTF-8` if `locale` says POSIX).
+* Debian/Ubuntu ship ImageMagick 6, which has no `magick` command, so folders get plain covers.
 
 ## Protocol notes
 
