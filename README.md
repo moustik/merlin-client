@@ -33,6 +33,8 @@ what is missing (see *Linux* below).
 
 In the TUI, **My audio files** imports audio from this Mac. Press `i` and type or drag-and-drop paths; files and whole folders both work. Then choose where the files go: an existing folder on the speaker, or **➕ New folder in <section>** (Histoires, Musique, Documentaires…). `n` creates an empty folder, `r` renames, and `x` removes.
 
+**➕ New section** adds a top-level section of your own, such as "Musiques", next to the speaker's Histoires and Documentaires (before the favourites). It then asks for a first folder, because tracks go into folders. Its cover shows its name, like your folders. Removing a section removes everything in it.
+
 * **Transcoding (needs `ffmpeg`, `brew install ffmpeg`):** the speaker plays MP3 at 44.1 kHz, either mono 64 kbps or stereo 128 kbps. MP3s already at 44.1 kHz and up to 192 kbps are copied untouched. Everything else is converted, mono to 64 kbps and stereo to 128 kbps.
 * **Covers:** each track gets a 128×128 JPEG cover, taken from the file's artwork or a plain default. The speaker doesn't display folder names, so each folder you create gets a cover showing its name: white text sized to fit, on a color derived from the name (needs ImageMagick, `brew install imagemagick`; otherwise a plain cover). Renaming a folder redraws its cover, and so does the "Mes fichiers" fallback folder.
 * **Titles:** they come from the file's title tag, or the file name, and are shortened to the speaker's limit like the server does (60 bytes + "...").

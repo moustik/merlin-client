@@ -124,6 +124,35 @@ class LocalLibraryTest < Minitest::Test
     refute File.exist?(@lib.cover_path(f.uuid))
   end
 
+  # A section of your own sits next to the speaker's, before favourites.
+  def test_own_section_goes_at_the_top_level
+    folder_first = @lib.add_folder("Comptines", parent: "sec-mus") # an older folder, listed before the section
+    section = @lib.add_section("Musiques")
+    rock = @lib.add_folder("Rock", parent: section.uuid)
+    t, = @lib.import(source("a.mp3"), parent: rock.uuid)
+
+    p = plan
+    assert_equal({ tracks: 1, folders: 3, relocated: [] }, @lib.merge!(p))
+    tree = JSON.parse(p["playlistText"])
+    assert_equal ["Histoires", "Musique", "Musiques", "Merlin_favorite"], tree.map { _1["title"] }
+    mine = tree[2]
+    assert_equal [section.uuid, ["Rock"], [t.uuid]], [mine["uuid"], mine["child"].map { _1["title"] }, mine["child"][0]["child"].map { _1["uuid"] }]
+    assert_equal ["Comptines"], tree[1]["child"].map { _1["title"] }
+    assert_equal "cover titled Musiques", File.read(@lib.cover_path(section.uuid))
+    assert_includes p["fileList"].map { _1["filename"] }, "#{section.uuid}.jpg"
+    assert_equal [section], @lib.sections
+    refute folder_first.section?
+  end
+
+  def test_remove_section_removes_everything_in_it
+    section = @lib.add_section("Musiques")
+    rock = @lib.add_folder("Rock", parent: section.uuid)
+    t, = @lib.import(source("a.mp3"), parent: rock.uuid)
+    @lib.remove(section.uuid)
+    assert @lib.empty?
+    refute File.exist?(@lib.audio_path(t.uuid))
+  end
+
   def test_persisted_per_speaker
     @lib.import(source("a.mp3"), parent: "fold-belles")
     assert_equal 1, Merlin::LocalLibrary.new(dir: @dir, setting_id: "verte", media: FakeMedia).tracks.size

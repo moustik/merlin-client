@@ -12,13 +12,15 @@ module Merlin
   # The speaker's tree is section -> folder -> track (e.g. Histoires -> Les
   # Belles Histoires -> episode). Tracks go into an existing folder or a local
   # folder created inside a section; each node needs a <uuid>.jpg cover and each
-  # track a <uuid>.mp3.
+  # track a <uuid>.mp3. A local folder with no parent is a section of its own
+  # (e.g. "Musiques" next to Histoires and Documentaires).
   class LocalLibrary
     FALLBACK_FOLDER = "Mes fichiers"
     TITLE_BYTES = 63 # longest title the server sends; it shortens with "..."
 
     Entry = Data.define(:uuid, :kind, :title, :parent, :added_at, :duration, :source) do
       def folder? = kind == "folder"
+      def section? = folder? && parent.nil?
       def track? = kind == "track"
       def to_h = super.transform_keys(&:to_s)
     end
@@ -34,6 +36,7 @@ module Merlin
 
     def entries = @entries.dup
     def folders = @entries.select(&:folder?)
+    def sections = @entries.select(&:section?)
     def tracks = @entries.select(&:track?)
     def find(uuid) = @entries.find { _1.uuid == uuid }
     def children(parent) = @entries.select { _1.parent == parent }
@@ -42,7 +45,7 @@ module Merlin
     def audio_path(uuid) = File.join(files_dir, "#{uuid}.mp3")
     def cover_path(uuid) = File.join(files_dir, "#{uuid}.jpg")
 
-    # A new folder inside one of the speaker's sections.
+    # A new folder inside one of the speaker's sections (or one of yours).
     def add_folder(title, parent:)
       entry = Entry.new(uuid: SecureRandom.uuid, kind: "folder", title: self.class.speaker_title(title),
                         parent: parent, added_at: Time.now.to_i, duration: nil, source: nil)
@@ -52,6 +55,9 @@ module Merlin
       save
       entry
     end
+
+    # A new top-level section, shown on the speaker next to Histoires etc.
+    def add_section(title) = add_folder(title, parent: nil)
 
     # Imports one audio file into parent (a speaker folder or a local folder).
     # Returns [entry, :copied | :transcoded].
@@ -82,9 +88,10 @@ module Merlin
       replace(uuid) { _1.with(parent: parent) }
     end
 
-    # Removing a folder removes the tracks in it.
+    # Removing a folder (or section) removes everything in it.
     def remove(uuid)
-      doomed = [uuid] + children(uuid).map(&:uuid)
+      doomed = [uuid]
+      doomed.each { |u| doomed.concat(children(u).map(&:uuid)) }
       doomed.each { |u| FileUtils.rm_f([audio_path(u), cover_path(u)]) }
       @entries.reject! { doomed.include?(_1.uuid) }
       doomed.each { cover_titles.delete(_1) }
@@ -115,10 +122,16 @@ module Merlin
       raise Error, "the speaker playlist has no section to add files to" if sections.empty?
 
       files = []
-      folders.each do |f|
-        parent = containers[f.parent] || sections.first
+      # Your sections go after the speaker's own, before favourites and the like.
+      at = tree.index { _1.key?("favorite") } || tree.size
+      folders.partition(&:section?).flatten.each do |f| # sections first, order kept
         node = { "uuid" => f.uuid, "title" => f.title, "child" => [] }
-        parent["child"] << node
+        if f.section?
+          tree.insert(at, node)
+          at += 1
+        else
+          (containers[f.parent] || sections.first)["child"] << node
+        end
         containers[f.uuid] = node
         files << file_entry(f, "image")
       end

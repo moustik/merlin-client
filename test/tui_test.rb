@@ -249,6 +249,22 @@ class TUITest < Minitest::Test
     assert_equal ["mp3", 44_100, 1], [info.codec, info.sample_rate, info.channels]
   end
 
+  # My audio files -> n -> "New section" (last row) -> name it -> its first folder.
+  def test_create_a_section_of_your_own
+    @config.setting_id = "s1"
+    with_test_terminal(100, 30, timeout: 15) do
+      inject_keys(:end, :up, :up, :enter, "n", :end, :enter, *"Musiques".chars, :enter, *"Rock".chars, :enter)
+      app(FakeBackend.new).run(stop_when: lambda { |a|
+        a.screen.is_a?(Merlin::TUI::Screens::LocalLibraryScreen) && screen_text.include?("Rock  (your folder)")
+      })
+      assert_includes screen_text, "Musiques  (your section)"
+    end
+    lib = @config.library
+    section = lib.sections.first
+    assert_equal ["Musiques", nil], [section.title, section.parent]
+    assert_equal [["Rock", section.uuid]], lib.folders.reject(&:section?).map { [_1.title, _1.parent] }
+  end
+
   def test_import_rejects_paths_without_audio
     @config.setting_id = "s1"
     with_test_terminal(100, 30) do

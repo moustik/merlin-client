@@ -15,12 +15,14 @@ module Merlin
         def sections = speaker_tree.select { _1["child"].is_a?(Array) }
         def section_folders(section) = Array(section["child"]).select { _1["child"].is_a?(Array) }
 
-        # uuid => "Section › Folder" (and sections => "Section").
+        # uuid => "Section › Folder" (and sections => "Section"), yours included.
         def place_names
-          sections.each_with_object({}) do |s, names|
-            names[s["uuid"]] = s["title"]
-            section_folders(s).each { |f| names[f["uuid"]] = "#{s['title']} › #{f['title']}" }
+          names = sections.each_with_object({}) do |s, h|
+            h[s["uuid"]] = s["title"]
+            section_folders(s).each { |f| h[f["uuid"]] = "#{s['title']} › #{f['title']}" }
           end
+          app.library.sections.each { names[_1.uuid] = _1.title }
+          names
         end
       end
 
@@ -49,7 +51,10 @@ module Merlin
             rows << Row.header(names[parent] ? "📁 #{names[parent]}" : "📁 #{LocalLibrary::FALLBACK_FOLDER} (original folder is gone)")
             library.children(parent).each { rows << track_row(_1) }
           end
-          library.folders.each do |f|
+          library.sections.each do |s|
+            rows << Row.item("📚 #{s.title}  (your section)", s.uuid, markable: true)
+          end
+          library.folders.reject(&:section?).each do |f|
             rows << Row.header("📁 #{names[f.parent] || '?'}")
             rows << Row.item("📁 #{f.title}  (your folder)", f.uuid, markable: true)
             library.children(f.uuid).each { rows << track_row(_1, "    ") }
@@ -60,7 +65,7 @@ module Merlin
         def on_key(event)
           case event.to_s
           when "i" then ask_paths
-          when "n" then app.push(DestinationScreen.new(app, mode: :folder))
+          when "n" then app.push(DestinationScreen.new(app, mode: :folder)) # also offers a new section
           when "r" then rename_current
           when "x" then remove_targets
           end
@@ -123,14 +128,17 @@ module Merlin
           return [Row.text("The speaker has no sections yet — sync once first.")] if sections.empty?
 
           library = app.library
-          sections.flat_map do |s|
-            rows = [Row.header(s["title"])]
+          places = sections.map { [_1["uuid"], _1["title"], _1["title"], section_folders(_1)] } +
+                   library.sections.map { [_1.uuid, _1.title, "#{_1.title}  (your section)", []] }
+          rows = places.flat_map do |uuid, title, header, speaker_folders|
+            group = [Row.header(header)]
             if @mode == :tracks
-              section_folders(s).each { |f| rows << Row.item("📁 #{f['title']}", [:folder, f["uuid"]]) }
-              library.folders.select { _1.parent == s["uuid"] }.each { |f| rows << Row.item("📁 #{f.title}  (your folder)", [:folder, f.uuid]) }
+              speaker_folders.each { |f| group << Row.item("📁 #{f['title']}", [:folder, f["uuid"]]) }
+              library.folders.select { _1.parent == uuid }.each { |f| group << Row.item("📁 #{f.title}  (your folder)", [:folder, f.uuid]) }
             end
-            rows << Row.item("➕ New folder in #{s['title']}…", [:new_folder, s["uuid"], s["title"]])
+            group << Row.item("➕ New folder in #{title}…", [:new_folder, uuid, title])
           end
+          rows << Row.header("New section") << Row.item("➕ New section (next to Histoires, Documentaires…)", [:new_section])
         end
 
         def activate(row)
@@ -138,6 +146,7 @@ module Merlin
           case kind
           when :folder then import_into(uuid)
           when :new_folder then ask_folder_name(uuid, section_title)
+          when :new_section then ask_section_name
           end
         end
 
@@ -150,6 +159,18 @@ module Merlin
             next unless folder
 
             @mode == :folder ? finish("Folder #{folder.title} created in #{section_title}") : import_into(folder.uuid)
+          end)
+        end
+
+        # The speaker plays folders, so a new section then asks for its first folder.
+        def ask_section_name
+          app.push(InputScreen.new(app, "New section", label: "Name") do |name|
+            section = app.load("Creating section…") { app.library.add_section(name) }
+            app.pop # name input
+            next unless section
+
+            reload!
+            ask_folder_name(section.uuid, section.title)
           end)
         end
 
